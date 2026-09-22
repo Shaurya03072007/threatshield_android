@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    color: #e9f1ff;
+    background: #07111f;
+  }
+
+  body {
+    margin: 0;
+    background: radial-gradient(circle at 82% -8%, #15345e 0, transparent 31rem), #07111f;
+    min-height: 100vh;
+  }
+}
+
+.mono {
+  font-family: 'DM Mono', monospace;
+}
+
+/* Command Center custom styles aligned with original dashboard/src/styles.css */
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 37px;
+  height: 37px;
+  border-radius: 12px;
+  color: #07111f;
+  background: #42d7b0;
+  font-size: 21px;
+}
+
+.panel-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #42d7b0;
+}
+
+.status-dot-live:before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #42d7b0;
+  box-shadow: 0 0 0 4px #42d7b020;
+  margin-right: 7px;
+}
+
+.status-dot-off:before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6f7f94;
+  margin-right: 7px;
+}
+
+.metric-card, .panel-card {
+  background: linear-gradient(145deg, #111f32, #0c1727);
+  border: 1px solid #21324a;
+  border-radius: 13px;
+}
+
+.insight-card {
+  border-left: 3px solid #42d7b0;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: #0b1727;
+  border-radius: 0 8px 8px 0;
+}
+
+.insight-card.high {
+  border-left-color: #ffb454;
+}
+
+.insight-card.critical {
+  border-left-color: #ee6c75;
+}
+
+.badge-risk {
+  font-family: 'DM Mono', monospace;
+  font-weight: 700;
+  font-size: 9px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.badge-risk.critical {
+  background: #57262e;
+  color: #ffb4ba;
+}
+
+.badge-risk.high {
+  background: #573e22;
+  color: #ffd49a;
+}
+
+.badge-risk.medium {
+  background: #4d4321;
+  color: #f9e291;
+}
+
+.badge-risk.review {
+  background: #1e3961;
+  color: #9ec8ff;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #07111f;
+}
+::-webkit-scrollbar-thumb {
+  background: #1c2b41;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2a3b55;
+}

@@ -1,0 +1,7 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+backend/node_modules
+dashboard/node_modules

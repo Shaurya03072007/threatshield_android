@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- These permissions are used only as test signals. The Java class never reads,
+         records, sends, or persists their protected data. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <application android:label="ThreatShield Risk Fixture" android:theme="@style/Theme.Fixture" android:allowBackup="false">
+        <!-- Deliberately no MAIN/LAUNCHER intent filter: this tests a hidden app signal. -->
+        <activity android:name=".FixtureActivity" android:exported="true" />
+    </application>
+</manifest>
