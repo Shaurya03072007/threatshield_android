@@ -7,10 +7,30 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Hardcoded connection settings from strings.xml. */
+/** Connection settings stored in SharedPreferences (fallback to strings.xml). */
 object BackendConfig {
-    fun url(context: Context) = context.getString(R.string.backend_url).trim().trimEnd('/')
-    fun token(context: Context) = context.getString(R.string.backend_token).trim()
+    private const val PREFS = "backend_config"
+    private const val KEY_URL = "backend_url"
+    private const val KEY_TOKEN = "backend_token"
+
+    fun url(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_URL, null) ?: context.getString(R.string.backend_url).trim().trimEnd('/')
+    }
+
+    fun token(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return prefs.getString(KEY_TOKEN, null) ?: context.getString(R.string.backend_token).trim()
+    }
+
+    fun save(context: Context, url: String, token: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString(KEY_URL, url.trim().trimEnd('/'))
+            .putString(KEY_TOKEN, token.trim())
+            .apply()
+    }
+
     fun isConfigured(context: Context) = url(context).isNotBlank() && token(context).isNotBlank()
 }
 
