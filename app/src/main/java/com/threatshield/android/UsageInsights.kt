@@ -3,14 +3,27 @@ package com.threatshield.android
 import android.app.AppOpsManager
 import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
+import android.app.usage.StorageStatsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Process
+import android.os.storage.StorageManager
+import java.util.UUID
 
 data class AppNetworkUsage(val label: String, val packageName: String, val bytes: Long)
 data class AppUsage(val label: String, val packageName: String, val foregroundMinutes: Long)
+
+data class AppActivityMetric(
+    val label: String,
+    val packageName: String,
+    val foregroundMinutes: Long,
+    val networkBytes: Long,
+    val cacheBytes: Long,
+    val dataBytes: Long,
+    val lastTimeUsed: Long
+)
 
 object UsageInsights {
     fun hasUsageAccess(context: Context): Boolean {
@@ -61,11 +74,136 @@ object UsageInsights {
         }.sortedByDescending { it.bytes }.take(12)
     }
 
+    fun aggregateActivity(context: Context): List<AppActivityMetric> {
+        if (!hasUsageAccess(context)) return emptyList()
+        val usageManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val networkManager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
+        val storageManager = context.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
+        val pm = context.packageManager
+        
+        val now = System.currentTimeMillis()
+        val from = now - 24 * 60 * 60 * 1000
+        
+        // 1. Get Usage Stats
+        val usageStats = usageManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, from, now)
+        val packageForeground = mutableMapOf<String, Long>()
+        val packageLastUsed = mutableMapOf<String, Long>()
+        for (stat in usageStats) {
+            packageForeground[stat.packageName] = (packageForeground[stat.packageName] ?: 0L) + stat.totalTimeInForeground
+            packageLastUsed[stat.packageName] = maxOf(packageLastUsed[stat.packageName] ?: 0L, stat.lastTimeUsed)
+        }
+        
+        // 2. Get Network Stats
+        val networkMap = mutableMapOf<Int, Long>()
+        listOf(android.net.ConnectivityManager.TYPE_WIFI, android.net.ConnectivityManager.TYPE_MOBILE).forEach { type ->
+            try {
+                networkManager.querySummary(type, null, from, now).use { stats ->
+                    val bucket = NetworkStats.Bucket()
+                    while (stats.hasNextBucket()) {
+                        stats.getNextBucket(bucket)
+                        networkMap[bucket.uid] = (networkMap[bucket.uid] ?: 0L) + bucket.rxBytes + bucket.txBytes
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        
+        // Map uid to packageName for network stats
+        val packageNetwork = mutableMapOf<String, Long>()
+        for ((uid, bytes) in networkMap) {
+            val pkgs = pm.getPackagesForUid(uid) ?: continue
+            val pkg = pkgs.firstOrNull() ?: continue
+            packageNetwork[pkg] = (packageNetwork[pkg] ?: 0L) + bytes
+        }
+        
+        // Combine all packages that have either usage or network activity
+        val allPackages = (packageForeground.keys + packageNetwork.keys).distinct()
+        
+        val result = allPackages.mapNotNull { pkg ->
+            var cache = 0L
+            var data = 0L
+            try {
+                val stats = storageManager.queryStatsForPackage(StorageManager.UUID_DEFAULT, pkg, Process.myUserHandle())
+                cache = stats.cacheBytes
+                data = stats.dataBytes
+            } catch (e: Exception) {}
+            
+            AppActivityMetric(
+                label = label(context, pkg),
+                packageName = pkg,
+                foregroundMinutes = (packageForeground[pkg] ?: 0L) / 60_000L,
+                networkBytes = packageNetwork[pkg] ?: 0L,
+                cacheBytes = cache,
+                dataBytes = data,
+                lastTimeUsed = packageLastUsed[pkg] ?: 0L
+            )
+        }
+        
+        return result.sortedByDescending { it.lastTimeUsed }
+    }
+
     private fun label(context: Context, packageName: String): String = try {
         val info = context.packageManager.getApplicationInfo(packageName, 0)
         context.packageManager.getApplicationLabel(info).toString()
     } catch (_: Exception) { packageName }
+    
+    fun hourlyStats(context: Context, packageName: String): AppHourlyStats {
+        val usageManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+        val networkManager = context.getSystemService(Context.NETWORK_STATS_SERVICE) as NetworkStatsManager
+        val pm = context.packageManager
+        
+        val now = System.currentTimeMillis()
+        val hourMs = 60 * 60 * 1000L
+        val timeActive = FloatArray(24)
+        val networkUse = FloatArray(24)
+        
+        val uid = try { pm.getPackageUid(packageName, 0) } catch (e: Exception) { -1 }
+        
+        for (i in 0 until 24) {
+            val end = now - (23 - i) * hourMs
+            val start = end - hourMs
+            
+            // Usage
+            val stats = usageManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, start, end)
+            val stat = stats.find { it.packageName == packageName }
+            timeActive[i] = (stat?.totalTimeInForeground ?: 0L) / 60_000f
+        }
+        
+        // Calculate deltas since queryUsageStats returns cumulative data for the interval bucket
+        for (i in 23 downTo 1) {
+             var diff = timeActive[i] - timeActive[i-1]
+             if (diff < 0) diff = timeActive[i]
+             timeActive[i] = diff
+        }
+        timeActive[0] = 0f 
+        
+        for (i in 0 until 24) {
+            val end = now - (23 - i) * hourMs
+            val start = end - hourMs
+            
+            var rxTx = 0f
+            if (uid != -1) {
+                listOf(android.net.ConnectivityManager.TYPE_WIFI, android.net.ConnectivityManager.TYPE_MOBILE).forEach { type ->
+                    try {
+                        networkManager.querySummary(type, null, start, end).use { summary ->
+                            val bucket = NetworkStats.Bucket()
+                            while (summary.hasNextBucket()) {
+                                summary.getNextBucket(bucket)
+                                if (bucket.uid == uid) {
+                                    rxTx += bucket.rxBytes + bucket.txBytes
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+            networkUse[i] = rxTx
+        }
+        
+        return AppHourlyStats(timeActive.toList(), networkUse.toList())
+    }
 }
+
+data class AppHourlyStats(val timeActiveMinutes: List<Float>, val networkBytes: List<Float>)
 
 class BootReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: android.content.Intent) {

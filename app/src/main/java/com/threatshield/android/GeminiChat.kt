@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** A single chat message, either from the user or from the AI model. */
 data class ChatMessage(
@@ -125,7 +127,7 @@ object GeminiChatStore {
  * Automatically appends the user message and AI reply to GeminiChatStore.
  * Call on a background dispatcher (Dispatchers.IO).
  */
-suspend fun sendChatMessage(context: Context, sessionId: String, userMessage: String): ChatMessage {
+suspend fun sendChatMessage(context: Context, sessionId: String, userMessage: String): ChatMessage = withContext(Dispatchers.IO) {
     val userMsg = ChatMessage(role = "user", text = userMessage)
     GeminiChatStore.append(context, sessionId, userMsg)
 
@@ -138,5 +140,5 @@ suspend fun sendChatMessage(context: Context, sessionId: String, userMessage: St
         ChatMessage(role = "model", text = "Could not reach the AI. Check your backend connection.", isError = true)
     }
     GeminiChatStore.append(context, sessionId, aiMsg)
-    return aiMsg
+    aiMsg
 }
