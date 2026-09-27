@@ -10,9 +10,21 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,45 +32,50 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.SettingsEthernet
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,27 +83,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.sp
 
 private enum class Page(val title: String) { DASHBOARD("ThreatShield"), SCAN("App scan"), ACTIVITY("Activity"), CONNECT("Dashboard connection"), CHAT("Chat with AI") }
 private val DarkColorScheme = darkColorScheme(
@@ -221,8 +228,10 @@ private fun Dashboard(
     modifier: Modifier, monitorActive: Boolean, report: ScanReport?, onStart: () -> Unit, onStop: () -> Unit,
     onScan: () -> Unit, onActivity: () -> Unit, onUsageAccess: () -> Unit, onConnect: () -> Unit, onChat: () -> Unit
 ) {
-    val samples = MonitorStore.samples(LocalContext.current)
+    val context = LocalContext.current
+    val samples = MonitorStore.samples(context)
     val latest = samples.lastOrNull()
+    val hasUsageAccess = remember(context) { UsageInsights.hasUsageAccess(context) }
     
     LazyColumn(modifier = modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -280,7 +289,7 @@ private fun Dashboard(
                 Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.SettingsEthernet, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(16.dp))
-                    Text(if (BackendConfig.isConfigured(LocalContext.current)) "Dashboard connected" else "Connect dashboard", fontWeight = FontWeight.SemiBold)
+                    Text(if (BackendConfig.isConfigured(context)) "Dashboard connected" else "Connect dashboard", fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -304,7 +313,7 @@ private fun Dashboard(
             }
         }
         
-        if (!UsageInsights.hasUsageAccess(LocalContext.current)) {
+        if (!hasUsageAccess) {
             item {
                 ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                     Column(Modifier.padding(16.dp)) {
@@ -329,7 +338,7 @@ private fun Dashboard(
 private fun StatusCard(title: String, text: String, color: Color) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(12.dp).background(color, androidx.compose.foundation.shape.CircleShape))
+            Box(Modifier.size(12.dp).background(color, CircleShape))
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(title, fontWeight = FontWeight.Bold)
@@ -441,6 +450,12 @@ private fun AppDetailPage(modifier: Modifier, metric: AppActivityMetric, onBack:
         }
     }
     
+    val chartProgress by animateFloatAsState(
+        targetValue = if (hourlyStats != null) 1f else 0f,
+        animationSpec = tween(1000),
+        label = "ChartAnimation"
+    )
+
     Column(modifier.fillMaxSize().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back to Activity") }
         Text(metric.label, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -468,11 +483,7 @@ private fun AppDetailPage(modifier: Modifier, metric: AppActivityMetric, onBack:
                     val spacing = 4f
                     
                     for (i in 0 until 24) {
-                        val animatedHeight by androidx.compose.animation.core.animateFloatAsState(
-                            targetValue = (targetStats[i] / maxBytes) * size.height,
-                            animationSpec = tween(1000)
-                        )
-                        val barHeight = animatedHeight
+                        val barHeight = (targetStats[i] / maxBytes) * size.height * chartProgress
                         drawRect(
                             color = Color(0xFF1976D2), // Using a nice blue for network
                             topLeft = Offset(i * barWidth + spacing / 2, size.height - barHeight),
@@ -497,11 +508,7 @@ private fun AppDetailPage(modifier: Modifier, metric: AppActivityMetric, onBack:
                     val spacing = 4f
                     
                     for (i in 0 until 24) {
-                        val animatedHeight by androidx.compose.animation.core.animateFloatAsState(
-                            targetValue = (targetStats[i] / maxMinutes) * size.height,
-                            animationSpec = tween(1000)
-                        )
-                        val barHeight = animatedHeight
+                        val barHeight = (targetStats[i] / maxMinutes) * size.height * chartProgress
                         drawRect(
                             color = Color(0xFF9C27B0), // Purple for time active
                             topLeft = Offset(i * barWidth + spacing / 2, size.height - barHeight),
@@ -541,13 +548,13 @@ private fun ChatPage(modifier: Modifier, onBack: () -> Unit) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) { Text("Dashboard") }
             Spacer(Modifier.width(8.dp))
-            androidx.compose.foundation.layout.Box {
+            Box {
                 Button(onClick = { expanded = true }) {
                     Text("Session ▼")
                 }
-                androidx.compose.material3.DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     sessions.forEach { s ->
-                        androidx.compose.material3.DropdownMenuItem(
+                        DropdownMenuItem(
                             text = { 
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(s.title + if (s.id == currentSession.id) " (Active)" else "", Modifier.weight(1f))
@@ -569,7 +576,7 @@ private fun ChatPage(modifier: Modifier, onBack: () -> Unit) {
                             }
                         )
                     }
-                    androidx.compose.material3.DropdownMenuItem(
+                    DropdownMenuItem(
                         text = { Text("➕ New Session") },
                         onClick = {
                             val newS = GeminiChatStore.createSession(context, "New Chat ${sessions.size + 1}")
@@ -601,7 +608,7 @@ private fun ChatPage(modifier: Modifier, onBack: () -> Unit) {
                 
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = alignment) {
                     Card(
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = bgColor),
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).widthIn(max = 280.dp)
                     ) {
